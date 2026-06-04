@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fdfbf7;
+  --foreground: #2d3748;
+  --primary: #f59e0b;
+  --primary-hover: #d97706;
+  --accent: #10b981;
+  --game-board: #e2e8f0;
+  --letter-bg: #ffffff;
+  --letter-active: #fcd34d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-accent: var(--accent);
+  --color-game-board: var(--game-board);
+  --color-letter-bg: var(--letter-bg);
+  --color-letter-active: var(--letter-active);
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1e1b4b;
+    --foreground: #f8fafc;
+    --primary: #f59e0b;
+    --primary-hover: #fbbf24;
+    --accent: #34d399;
+    --game-board: #312e81;
+    --letter-bg: #4338ca;
+    --letter-active: #fcd34d;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  background-image: radial-gradient(circle at top right, rgba(245,158,11,0.1), transparent 50%),
+                    radial-gradient(circle at bottom left, rgba(16,185,129,0.1), transparent 50%);
+  background-attachment: fixed;
+}
