@@ -33,12 +33,21 @@ export default function GameBoard({ onBackToHome }: Props) {
     setLoading(true);
     setLevelComplete(false);
     try {
-      const res = await fetch(`/api/levels?level=${level}`);
-      const data: LevelData = await res.json();
-      setLevelData(data);
+      const { generateLevel } = await import('@/lib/level-generator');
+      const { LEVEL_WORDS, DICTIONARY } = await import('@/lib/dictionary');
+      
+      const levelIndex = (level - 1) % LEVEL_WORDS.length;
+      const masterWord = LEVEL_WORDS[levelIndex];
+      const levelDataResult = generateLevel(masterWord, DICTIONARY);
+      
+      setLevelData({
+        level,
+        masterWord,
+        ...levelDataResult,
+      });
       setFoundWords([]);
     } catch (e) {
-      console.error("Failed to load level", e);
+      console.error("Failed to generate level client-side", e);
     } finally {
       setLoading(false);
     }
