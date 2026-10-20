@@ -1,134 +1,192 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useGameStore } from '@/store/gameStore';
+import { getWorldForLevel } from '@/lib/worlds';
+import ShopModal from './ShopModal';
+import SettingsModal from './SettingsModal';
 
 interface Props {
   onPlay: () => void;
   onLeaderboard: () => void;
   onRewards: () => void;
+  onOpenLogin: () => void;
 }
 
-export default function HomeScreen({ onPlay, onLeaderboard, onRewards }: Props) {
+export default function HomeScreen({ onPlay, onLeaderboard, onRewards, onOpenLogin }: Props) {
   const { coins, playerLevel, xp, currentLevel, dailyStreak } = useGameStore();
+  const [showShop, setShowShop] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const { world, levelInWorld, progressPercent } = getWorldForLevel(currentLevel);
   const xpForNext = 100;
-  const xpProgress = (xp % xpForNext) / xpForNext * 100;
+  const xpProgress = ((xp % xpForNext) / xpForNext) * 100;
 
   return (
-    <div className="flex flex-col items-center justify-between min-h-screen w-full max-w-md mx-auto p-6 pt-12 pb-10">
+    <div className={`flex flex-col items-center justify-between min-h-screen w-full max-w-md mx-auto p-5 pt-8 pb-8 bg-gradient-to-b ${world.theme.bgGradient} text-white select-none transition-colors duration-700`}>
       
-      {/* Logo & Title */}
+      {/* Top Bar: Profile & Coins & Settings */}
+      <div className="w-full flex justify-between items-center z-10">
+        {/* XP Level pill */}
+        <div className="bg-white/10 border border-white/10 px-3.5 py-1.5 rounded-full flex items-center gap-2 backdrop-blur-sm">
+          <span className="text-base">🌟</span>
+          <span className="text-xs font-black">Niv {playerLevel}</span>
+        </div>
+
+        {/* Coins button opening Shop */}
+        <button
+          onClick={() => setShowShop(true)}
+          className="bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 px-3.5 py-1.5 rounded-full font-black text-xs text-amber-300 backdrop-blur-sm flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+        >
+          <span>🪙</span>
+          <span>{coins}</span>
+          <span className="bg-amber-400 text-stone-950 rounded-full w-4 h-4 flex items-center justify-center text-[10px] ml-0.5 font-black">+</span>
+        </button>
+
+        {/* Settings button */}
+        <button
+          onClick={() => setShowSettings(true)}
+          className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 flex items-center justify-center text-sm backdrop-blur-sm active:scale-95 transition-all"
+        >
+          ⚙️
+        </button>
+      </div>
+
+      {/* Main Branding Logo & Title */}
       <motion.div
-        className="flex flex-col items-center gap-2"
-        initial={{ opacity: 0, y: -30 }}
+        className="flex flex-col items-center text-center my-4 z-10"
+        initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: 'easeOut' }}
+        transition={{ duration: 0.5 }}
       >
-        <div className="text-7xl mb-2">💬</div>
-        <h1 className="text-5xl font-black tracking-tight text-foreground">
-          Mot<span className="text-primary">Zen</span>
+        <motion.div
+          className="text-6xl mb-2 drop-shadow-lg"
+          animate={{ rotate: [0, 4, -4, 0] }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          🌍
+        </motion.div>
+        <h1 className="text-4xl font-black tracking-tight text-white drop-shadow-md">
+          Mot<span className="text-amber-400">Zen</span>
         </h1>
-        <p className="text-foreground/60 text-base font-medium">Trouve les mots cachés</p>
+        <p className="text-xs text-white/70 font-semibold tracking-wide uppercase mt-1">
+          Le Voyage des Mots
+        </p>
       </motion.div>
 
-      {/* Player Card */}
+      {/* Words of Wonders: Active Chapter & Monument Card */}
       <motion.div
-        className="w-full bg-white/80 backdrop-blur-sm rounded-3xl p-5 shadow-xl border border-white mt-6"
-        initial={{ opacity: 0, scale: 0.9 }}
+        className="w-full bg-white/10 backdrop-blur-md rounded-3xl p-5 border border-white/15 shadow-2xl z-10 relative overflow-hidden"
+        initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.2, duration: 0.5 }}
+        transition={{ delay: 0.15, duration: 0.4 }}
       >
-        <div className="flex justify-between items-center mb-3">
+        {/* Glow */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="flex justify-between items-start mb-2">
           <div>
-            <p className="text-xs text-foreground/50 font-semibold uppercase tracking-wider">Niveau Joueur</p>
-            <p className="text-3xl font-black text-foreground">{playerLevel}</p>
+            <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+              <span>{world.flag}</span>
+              <span>{world.name}, {world.country}</span>
+            </span>
+            <h2 className="text-xl font-black text-white mt-0.5">{world.monument}</h2>
           </div>
           <div className="text-right">
-            <p className="text-xs text-foreground/50 font-semibold uppercase tracking-wider">Pièces</p>
-            <p className="text-3xl font-black text-primary">🪙 {coins}</p>
+            <span className="text-xs font-bold text-white/60">Étape</span>
+            <p className="text-base font-black text-amber-300">
+              {levelInWorld} <span className="text-xs text-white/40">/ {world.levelsCount}</span>
+            </p>
           </div>
         </div>
-        {/* XP Bar */}
-        <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+
+        <p className="text-xs text-white/70 italic mb-4">
+          &ldquo;{world.description}&rdquo;
+        </p>
+
+        {/* Progress Bar in current Wonder */}
+        <div className="w-full bg-black/40 h-2.5 rounded-full overflow-hidden p-0.5 border border-white/10 mb-2">
           <motion.div
-            className="h-full bg-gradient-to-r from-primary to-amber-300 rounded-full"
+            className="h-full bg-gradient-to-r from-amber-400 to-yellow-300 rounded-full"
             initial={{ width: 0 }}
-            animate={{ width: `${xpProgress}%` }}
-            transition={{ delay: 0.5, duration: 0.8 }}
+            animate={{ width: `${progressPercent}%` }}
+            transition={{ delay: 0.3, duration: 0.8 }}
           />
         </div>
-        <p className="text-xs text-foreground/40 mt-1">{xp % xpForNext}/{xpForNext} XP pour le prochain niveau</p>
-
-        {/* Stats Row */}
-        <div className="flex justify-around mt-4 pt-4 border-t border-gray-100">
-          <div className="text-center">
-            <p className="text-2xl font-black text-foreground">{currentLevel}</p>
-            <p className="text-xs text-foreground/50">Niveau Jeu</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-black text-accent">🔥 {dailyStreak}</p>
-            <p className="text-xs text-foreground/50">Jours Consécutifs</p>
-          </div>
+        <div className="flex justify-between items-center text-[10px] text-white/50 font-semibold">
+          <span>Niveau {currentLevel} en cours</span>
+          <span>{progressPercent}% complété</span>
         </div>
       </motion.div>
 
-      {/* Main Buttons */}
-      <div className="w-full flex flex-col gap-4 mt-6">
+      {/* Primary Action Button (Play level) */}
+      <div className="w-full flex flex-col gap-3 my-4 z-10">
         <motion.button
           onClick={onPlay}
-          className="w-full py-5 bg-gradient-to-r from-primary to-amber-400 text-white font-black text-2xl rounded-2xl shadow-lg shadow-primary/30 active:scale-95 flex items-center justify-center gap-3"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.4 }}
+          className="w-full py-5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 text-stone-950 font-black text-xl rounded-2xl shadow-xl shadow-amber-500/30 active:scale-95 flex items-center justify-center gap-3 transition-transform"
           whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.97 }}
+          whileTap={{ scale: 0.98 }}
         >
-          🎮 Jouer — Niveau {currentLevel}
+          <span className="text-2xl">🎮</span>
+          <span>JOUER — NIVEAU {currentLevel}</span>
         </motion.button>
 
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { icon: '🏆', label: 'Classement', action: onLeaderboard },
-            { icon: '🎁', label: 'Récompenses', action: onRewards },
-            { icon: '⚙️', label: 'Paramètres', action: () => {} },
-          ].map((item, i) => (
-            <motion.button
-              key={item.label}
-              onClick={item.action}
-              className="py-4 bg-white/80 backdrop-blur-sm rounded-2xl font-bold text-sm text-foreground shadow-sm border border-white flex flex-col items-center gap-2 active:scale-95"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 + i * 0.1 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <span className="text-2xl">{item.icon}</span>
-              {item.label}
-            </motion.button>
-          ))}
+        {/* Secondary Navigation Grid */}
+        <div className="grid grid-cols-3 gap-2.5">
+          <motion.button
+            onClick={() => setShowShop(true)}
+            className="py-3 px-2 bg-white/10 hover:bg-white/15 border border-white/10 rounded-2xl flex flex-col items-center gap-1 backdrop-blur-sm active:scale-95 transition-all"
+            whileTap={{ scale: 0.95 }}
+          >
+            <span className="text-xl">🎬</span>
+            <span className="text-[11px] font-black text-amber-300">Pub Gratuite</span>
+            <span className="text-[9px] text-white/60">+50 🪙</span>
+          </motion.button>
+
+          <motion.button
+            onClick={onRewards}
+            className="py-3 px-2 bg-white/10 hover:bg-white/15 border border-white/10 rounded-2xl flex flex-col items-center gap-1 backdrop-blur-sm active:scale-95 transition-all"
+            whileTap={{ scale: 0.95 }}
+          >
+            <span className="text-xl">🎁</span>
+            <span className="text-[11px] font-black text-white">Cadeau</span>
+            <span className="text-[9px] text-amber-400">🔥 {dailyStreak}j</span>
+          </motion.button>
+
+          <motion.button
+            onClick={onLeaderboard}
+            className="py-3 px-2 bg-white/10 hover:bg-white/15 border border-white/10 rounded-2xl flex flex-col items-center gap-1 backdrop-blur-sm active:scale-95 transition-all"
+            whileTap={{ scale: 0.95 }}
+          >
+            <span className="text-xl">🏆</span>
+            <span className="text-[11px] font-black text-white">Classement</span>
+            <span className="text-[9px] text-white/60">Mondial</span>
+          </motion.button>
         </div>
       </div>
 
-      {/* Daily Reward Banner */}
-      {dailyStreak > 0 && (
-        <motion.div
-          className="w-full bg-gradient-to-r from-accent to-emerald-400 rounded-2xl p-4 mt-4 flex items-center gap-4 text-white"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.7 }}
-        >
-          <span className="text-3xl">🎁</span>
-          <div>
-            <p className="font-black">Récompense quotidienne</p>
-            <p className="text-sm opacity-90">Série de {dailyStreak} jours ! Réclamez vos pièces.</p>
-          </div>
-          <button className="ml-auto bg-white/30 px-3 py-1 rounded-lg font-bold text-sm">
-            +50 🪙
-          </button>
-        </motion.div>
-      )}
+      {/* Footer XP bar */}
+      <div className="w-full bg-white/5 border border-white/10 rounded-2xl p-2.5 px-3 z-10">
+        <div className="flex justify-between items-center text-[10px] text-white/60 font-bold mb-1">
+          <span>Niveau Joueur {playerLevel}</span>
+          <span>{xp % xpForNext} / {xpForNext} XP</span>
+        </div>
+        <div className="w-full bg-black/30 h-1.5 rounded-full overflow-hidden">
+          <div className="bg-blue-400 h-full rounded-full" style={{ width: `${xpProgress}%` }} />
+        </div>
+      </div>
 
-      <p className="text-foreground/30 text-xs mt-6">MotZen v1.0 · Made with ❤️</p>
+      {/* Shop Modal */}
+      {showShop && <ShopModal onClose={() => setShowShop(false)} />}
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          onOpenLogin={onOpenLogin}
+        />
+      )}
     </div>
   );
 }

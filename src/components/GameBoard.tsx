@@ -1,11 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import LetterWheel from './LetterWheel';
 import Grid, { GridWord } from './Grid';
+import VictoryModal from './VictoryModal';
+import ShopModal from './ShopModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { useGameStore } from '@/store/gameStore';
+import { getWorldForLevel } from '@/lib/worlds';
+import { adService } from '@/lib/ads';
 
 interface LevelData {
   level: number;
@@ -21,41 +25,61 @@ interface Props {
 }
 
 export default function GameBoard({ onBackToHome }: Props) {
-  const { coins, currentLevel, spendCoins, completeLevel, recordWordFound, addCoins } = useGameStore();
+  const {
+    coins,
+    currentLevel,
+    spendCoins,
+    addCoins,
+    completeLevel,
+    recordWordFound,
+    bonusJarWords,
+    bonusJarCapacity,
+    claimBonusJar,
+  } = useGameStore();
+
   const [levelData, setLevelData] = useState<LevelData | null>(null);
   const [foundWords, setFoundWords] = useState<string[]>([]);
-  const [feedback, setFeedback] = useState<{ text: string, type: 'success' | 'error' | 'bonus' } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [levelComplete, setLevelComplete] = useState(false);
-  const [bonusWordsList, setBonusWordsList] = useState<string[]>([]);
+  const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' | 'bonus' } | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [showVictory, setShowVictory] = useState(false);
+  const [hasDoubledLevelCoins, setHasDoubledLevelCoins] = useState(false);
+  const [showShop, setShowShop] = useState(false);
+  const [isWatchingAdForHint, setIsWatchingAdForHint] = useState(false);
 
-  const fetchLevel = async (level: number) => {
-    setLoading(true);
-    setLevelComplete(false);
+  // Current World / Wonder info
+  const { world, levelInWorld } = getWorldForLevel(currentLevel);
+
+  const loadLevel = useCallback(async (levelNumber: number) => {
     try {
       const { generateLevel } = await import('@/lib/level-generator');
       const { LEVEL_WORDS, DICTIONARY } = await import('@/lib/dictionary');
-      
-      const levelIndex = (level - 1) % LEVEL_WORDS.length;
+
+      const levelIndex = (levelNumber - 1) % LEVEL_WORDS.length;
       const masterWord = LEVEL_WORDS[levelIndex];
-      const levelDataResult = generateLevel(masterWord, DICTIONARY);
-      
+      const result = generateLevel(masterWord, DICTIONARY);
+
       setLevelData({
-        level,
+        level: levelNumber,
         masterWord,
-        ...levelDataResult,
+        ...result,
       });
       setFoundWords([]);
+      setHasDoubledLevelCoins(false);
     } catch (e) {
-      console.error("Failed to generate level client-side", e);
+      console.error('Failed to generate level', e);
     } finally {
-      setLoading(false);
+      setIsInitializing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchLevel(currentLevel);
-  }, [currentLevel]);
+    loadLevel(currentLevel);
+  }, [currentLevel, loadLevel]);
+
+  const showFeedback = (text: string, type: 'success' | 'error' | 'bonus') => {
+    setFeedback({ text, type });
+    setTimeout(() => setFeedback(null), 1800);
+  };
 
   const handleWordComplete = (word: string) => {
     if (!levelData || word.length < 2) return;
@@ -66,145 +90,220 @@ export default function GameBoard({ onBackToHome }: Props) {
       } else {
         const newFound = [...foundWords, word];
         setFoundWords(newFound);
-        recordWordFound(false);
+        recordWordFound(word, false);
         showFeedback(`+10 🪙  ${word}`, 'success');
 
         if (newFound.length === levelData.required_words.length) {
-          handleLevelComplete();
+          triggerLevelVictory();
         }
       }
     } else if (levelData.bonus_words.includes(word)) {
-      if (!bonusWordsList.includes(word)) {
-        setBonusWordsList(prev => [...prev, word]);
-        recordWordFound(true);
-        showFeedback(`Bonus ! +5 🪙  ${word}`, 'bonus');
+      if (!bonusJarWords.includes(word)) {
+        recordWordFound(word, true);
+        showFeedback(`Mot Bonus ! +5 🪙  ${word}`, 'bonus');
       } else {
-        showFeedback('Déjà trouvé !', 'error');
+        showFeedback('Bonus déjà trouvé !', 'error');
       }
     } else {
       showFeedback('Introuvable', 'error');
     }
   };
 
-  const handleLevelComplete = () => {
-    setLevelComplete(true);
+  const triggerLevelVictory = () => {
     confetti({
-      particleCount: 200,
-      spread: 80,
+      particleCount: 160,
+      spread: 70,
       origin: { y: 0.6 },
-      colors: ['#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#a78bfa']
+      colors: ['#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#fbbf24'],
     });
-    setTimeout(() => {
-      completeLevel();
-      setBonusWordsList([]);
-      fetchLevel(currentLevel + 1);
-    }, 2500);
+    // Open the victory modal without wiping or flashing the screen
+    setShowVictory(true);
   };
 
-  const handleHint = () => {
+  const handleNextLevelFromModal = async () => {
+    setShowVictory(false);
+
+    // Show Interstitial ad if frequency condition is met
+    if (adService.shouldShowInterstitial(currentLevel)) {
+      await adService.showInterstitial();
+    }
+
+    // Complete level in state (advances currentLevel)
+    completeLevel(hasDoubledLevelCoins ? 2 : 1);
+  };
+
+  const handleDoubleReward = () => {
+    if (!hasDoubledLevelCoins) {
+      addCoins(20); // Adds the other 20 to make +40
+      setHasDoubledLevelCoins(true);
+    }
+  };
+
+  const handleHint = async () => {
     if (!levelData) return;
-    if (!spendCoins(25)) {
-      showFeedback("Pas assez de pièces !", 'error');
+
+    const unfound = levelData.required_words.filter((w) => !foundWords.includes(w));
+    if (unfound.length === 0) return;
+
+    // Check if player has enough coins or wants a rewarded ad
+    if (coins < 25) {
+      // Offer rewarded video for free hint
+      setIsWatchingAdForHint(true);
+      const res = await adService.showRewardedAd('free_hint');
+      setIsWatchingAdForHint(false);
+
+      if (res.rewarded) {
+        revealWord(unfound[0]);
+        showFeedback('Indice Débloqué via Pub ! 💡', 'success');
+      }
       return;
     }
-    const unfound = levelData.required_words.filter(w => !foundWords.includes(w));
-    if (unfound.length > 0) {
-      const wordToReveal = unfound[0];
-      const newFound = [...foundWords, wordToReveal];
-      setFoundWords(newFound);
-      showFeedback(`Indice ! ${wordToReveal}`, 'success');
-      if (newFound.length === levelData.required_words.length) {
-        handleLevelComplete();
-      }
+
+    if (spendCoins(25)) {
+      revealWord(unfound[0]);
+    }
+  };
+
+  const revealWord = (wordToReveal: string) => {
+    const newFound = [...foundWords, wordToReveal];
+    setFoundWords(newFound);
+    showFeedback(`Indice : ${wordToReveal}`, 'success');
+
+    if (newFound.length === levelData?.required_words.length) {
+      triggerLevelVictory();
     }
   };
 
   const handleShuffle = () => {
     if (levelData) {
-      setLevelData({ ...levelData, letters: [...levelData.letters].sort(() => 0.5 - Math.random()) });
+      setLevelData({
+        ...levelData,
+        letters: [...levelData.letters].sort(() => 0.5 - Math.random()),
+      });
     }
   };
 
-  const showFeedback = (text: string, type: 'success' | 'error' | 'bonus') => {
-    setFeedback({ text, type });
-    setTimeout(() => setFeedback(null), 1800);
+  const handleClaimJar = () => {
+    const reward = claimBonusJar();
+    if (reward > 0) {
+      showFeedback(`Bocal ouvert ! +${reward} 🪙`, 'success');
+      confetti({ particleCount: 60, spread: 50, origin: { y: 0.3 } });
+    } else {
+      showFeedback(`Bocal : ${bonusJarWords.length}/${bonusJarCapacity} mots`, 'bonus');
+    }
   };
 
-  if (loading || !levelData) {
+  // Safe initial loading only on very first cold start
+  if (isInitializing || !levelData) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-stone-950 text-white p-6">
         <motion.div
-          className="text-6xl"
-          animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
-          transition={{ repeat: Infinity, duration: 1 }}
+          className="text-6xl mb-4"
+          animate={{ scale: [1, 1.15, 1], rotate: [0, 5, -5, 0] }}
+          transition={{ repeat: Infinity, duration: 1.5 }}
         >
-          💬
+          🌍
         </motion.div>
-        <p className="font-bold text-primary animate-pulse text-lg">Génération du niveau...</p>
+        <p className="font-black text-amber-400 text-lg">Préparation de votre voyage...</p>
       </div>
     );
   }
 
   const progress = foundWords.length / levelData.required_words.length;
+  const isJarFull = bonusJarWords.length >= bonusJarCapacity;
 
   return (
-    <div className="flex flex-col items-center w-full max-w-md mx-auto p-4 min-h-screen pt-6 pb-8">
-      {/* Top Bar */}
-      <div className="w-full flex justify-between items-center mb-4">
-        <button 
-          onClick={onBackToHome}
-          className="bg-white/80 px-4 py-2 rounded-full font-bold text-foreground/60 shadow-sm hover:bg-white transition-colors flex items-center gap-1"
-        >
-          ← Accueil
-        </button>
-        <div className="bg-white/80 px-4 py-2 rounded-full font-black text-primary shadow-sm flex items-center gap-1">
-          🌟 Niv {currentLevel}
+    <div className={`relative flex flex-col items-center justify-between w-full max-w-md mx-auto min-h-screen p-4 pt-6 pb-8 bg-gradient-to-b ${world.theme.bgGradient} text-white select-none overflow-hidden transition-colors duration-700`}>
+      {/* Rewarded Ad Hint Overlay */}
+      {isWatchingAdForHint && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center text-center p-6">
+          <div className="w-14 h-14 rounded-full border-4 border-amber-400 border-t-transparent animate-spin mb-4" />
+          <p className="text-xl font-black mb-1">Publicité Indice...</p>
+          <p className="text-sm text-white/70">Votre indice gratuit sera dévoilé juste après !</p>
         </div>
-        <div className="bg-white/80 px-4 py-2 rounded-full font-black text-accent shadow-sm flex items-center gap-1">
-          🪙 {coins}
+      )}
+
+      {/* Top Header Bar */}
+      <div className="w-full flex flex-col gap-2 z-10">
+        <div className="w-full flex justify-between items-center">
+          {/* Back button */}
+          <button
+            onClick={onBackToHome}
+            className="bg-white/10 hover:bg-white/20 border border-white/10 px-3.5 py-1.5 rounded-full font-bold text-xs text-white/90 backdrop-blur-sm transition-all flex items-center gap-1 active:scale-95"
+          >
+            ← Quitter
+          </button>
+
+          {/* Wonder / Level Badge */}
+          <div className="bg-white/10 border border-white/10 px-3.5 py-1.5 rounded-full font-black text-xs text-amber-300 backdrop-blur-sm flex items-center gap-1.5 shadow-sm">
+            <span>{world.flag}</span>
+            <span>Niv {currentLevel}</span>
+            <span className="text-white/40">·</span>
+            <span className="text-white/70 font-semibold">{levelInWorld}/{world.levelsCount}</span>
+          </div>
+
+          {/* Coins & Shop trigger */}
+          <button
+            onClick={() => setShowShop(true)}
+            className="bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 px-3.5 py-1.5 rounded-full font-black text-xs text-amber-300 backdrop-blur-sm flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+          >
+            <span>🪙</span>
+            <span>{coins}</span>
+            <span className="bg-amber-400 text-stone-950 rounded-full w-4 h-4 flex items-center justify-center text-[10px] ml-0.5">+</span>
+          </button>
+        </div>
+
+        {/* Wonder Title Subtitle */}
+        <div className="flex justify-between items-center px-1">
+          <p className="text-xs font-bold text-white/70 tracking-wide">
+            {world.monument}
+          </p>
+
+          {/* Bonus Jar Chest Trigger */}
+          <button
+            onClick={handleClaimJar}
+            className={`text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 transition-all ${
+              isJarFull
+                ? 'bg-amber-400 text-stone-950 animate-bounce shadow-md shadow-amber-400/50'
+                : 'bg-white/10 text-white/70 hover:bg-white/20'
+            }`}
+          >
+            <span>🏺</span>
+            <span>{bonusJarWords.length}/{bonusJarCapacity}</span>
+            {isJarFull && <span className="font-black text-[10px] uppercase ml-1">Ouvrir !</span>}
+          </button>
+        </div>
+
+        {/* Level Progress Bar */}
+        <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden backdrop-blur-sm">
+          <motion.div
+            className="h-full bg-gradient-to-r from-amber-400 to-amber-200 rounded-full"
+            animate={{ width: `${progress * 100}%` }}
+            transition={{ duration: 0.3 }}
+          />
         </div>
       </div>
 
-      {/* Progress Bar */}
-      <div className="w-full bg-white/50 rounded-full h-2 mb-4 overflow-hidden">
-        <motion.div
-          className="h-full bg-gradient-to-r from-primary to-amber-300 rounded-full"
-          animate={{ width: `${progress * 100}%` }}
-          transition={{ duration: 0.4 }}
-        />
-      </div>
-
-      {/* Grid */}
-      <div className="flex-1 flex items-center justify-center w-full min-h-[250px] my-4">
+      {/* Crossword Grid */}
+      <div className="flex-1 flex items-center justify-center w-full min-h-[220px] my-3 z-10">
         <Grid layout={levelData.layout} foundWords={foundWords} />
       </div>
 
-      {/* Bonus Words */}
-      {bonusWordsList.length > 0 && (
-        <motion.div
-          className="flex flex-wrap gap-2 justify-center mb-3"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          {bonusWordsList.map(w => (
-            <span key={w} className="bg-accent/20 text-accent font-bold px-3 py-1 rounded-full text-sm">
-              {w}
-            </span>
-          ))}
-        </motion.div>
-      )}
-
       {/* Feedback Toast */}
-      <div className="h-12 flex items-center justify-center mb-2">
+      <div className="h-10 flex items-center justify-center mb-1 z-10">
         <AnimatePresence>
           {feedback && (
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.85 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.85 }}
-              className={`px-6 py-2 rounded-full font-bold text-white shadow-lg text-sm
-                ${feedback.type === 'success' ? 'bg-primary' :
-                  feedback.type === 'error' ? 'bg-red-400' : 'bg-accent'}`}
+              className={`px-5 py-1.5 rounded-full font-black text-xs shadow-lg backdrop-blur-md ${
+                feedback.type === 'success'
+                  ? 'bg-emerald-500 text-white border border-emerald-400/40'
+                  : feedback.type === 'error'
+                  ? 'bg-rose-500 text-white border border-rose-400/40'
+                  : 'bg-amber-400 text-stone-950 border border-amber-300'
+              }`}
             >
               {feedback.text}
             </motion.div>
@@ -212,52 +311,64 @@ export default function GameBoard({ onBackToHome }: Props) {
         </AnimatePresence>
       </div>
 
-      {/* Level Complete Overlay */}
-      <AnimatePresence>
-        {levelComplete && (
-          <motion.div
-            className="absolute inset-0 flex items-center justify-center z-50 bg-black/30 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="bg-white rounded-3xl p-8 text-center shadow-2xl mx-6"
-              initial={{ scale: 0.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-            >
-              <div className="text-6xl mb-3">🎉</div>
-              <h2 className="text-3xl font-black text-foreground mb-2">Niveau Terminé !</h2>
-              <p className="text-foreground/60 mb-4">+50 XP · +20 🪙</p>
-              <div className="animate-pulse text-primary font-bold">Niveau suivant en cours...</div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Letter Wheel */}
-      <div className="my-4">
+      {/* Letter Wheel (Words of Wonders Circle) */}
+      <div className="my-2 z-10">
         <LetterWheel letters={levelData.letters} onWordComplete={handleWordComplete} />
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex gap-4 mt-2">
-        <button
+      {/* Bottom Power-Ups Bar (Shuffle & Hint) */}
+      <div className="w-full flex justify-center items-center gap-6 mt-1 z-10">
+        {/* Shuffle Button */}
+        <motion.button
           onClick={handleShuffle}
-          className="bg-white/80 p-4 rounded-full shadow-md text-xl hover:bg-white transition-colors active:scale-95"
-          title="Mélanger"
+          className="w-14 h-14 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white shadow-lg flex items-center justify-center text-2xl backdrop-blur-sm active:scale-90 transition-all"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.9 }}
+          title="Mélanger les lettres"
         >
           🔀
-        </button>
-        <button
+        </motion.button>
+
+        {/* Hint Button */}
+        <motion.button
           onClick={handleHint}
-          className="bg-white/80 px-5 py-4 rounded-full shadow-md text-sm font-bold hover:bg-white transition-colors flex items-center gap-2 active:scale-95"
-          title="Indice (-25 pièces)"
+          className={`h-14 px-6 rounded-full shadow-lg flex items-center gap-2.5 backdrop-blur-sm active:scale-95 transition-all ${
+            coins >= 25
+              ? 'bg-amber-400 hover:bg-amber-300 text-stone-950 font-black'
+              : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black'
+          }`}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          title="Révéler un mot"
         >
-          💡 Indice <span className="text-primary font-black">-25🪙</span>
-        </button>
+          <span className="text-2xl">💡</span>
+          <div className="text-left">
+            <p className="text-xs font-black uppercase tracking-wider leading-none">Indice</p>
+            <p className="text-[11px] opacity-90 leading-tight">
+              {coins >= 25 ? '-25 🪙' : '🎬 Gratuit'}
+            </p>
+          </div>
+        </motion.button>
       </div>
+
+      {/* Victory Modal (Words of Wonders celebratory transition) */}
+      <AnimatePresence>
+        {showVictory && (
+          <VictoryModal
+            level={currentLevel}
+            world={world}
+            levelInWorld={levelInWorld}
+            worldLevelsCount={world.levelsCount}
+            isWorldCompleted={levelInWorld >= world.levelsCount}
+            onNextLevel={handleNextLevelFromModal}
+            onDoubleReward={handleDoubleReward}
+            hasDoubled={hasDoubledLevelCoins}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Shop Modal */}
+      {showShop && <ShopModal onClose={() => setShowShop(false)} />}
     </div>
   );
 }

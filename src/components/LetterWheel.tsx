@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 
 interface LetterWheelProps {
@@ -20,7 +20,7 @@ export default function LetterWheel({ letters, onWordComplete }: LetterWheelProp
   const letterRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Calculate positions in a circle
-  const radius = 100;
+  const radius = 95;
   const positions = letters.map((_, i) => {
     const angle = (i * 2 * Math.PI) / letters.length - Math.PI / 2;
     return {
@@ -63,83 +63,120 @@ export default function LetterWheel({ letters, onWordComplete }: LetterWheelProp
     if (index !== -1) {
       if (selectedIndices[selectedIndices.length - 2] === index) {
         // Backtracking
-        setSelectedIndices(prev => prev.slice(0, -1));
+        setSelectedIndices((prev) => prev.slice(0, -1));
       } else if (!selectedIndices.includes(index)) {
-        // New letter
-        setSelectedIndices(prev => [...prev, index]);
+        // New letter added
+        setSelectedIndices((prev) => [...prev, index]);
       }
     }
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
     if (selectedIndices.length > 0) {
-      const word = selectedIndices.map(i => letters[i]).join('');
+      const word = selectedIndices.map((i) => letters[i]).join('');
       onWordComplete(word);
       setSelectedIndices([]);
       setCurrentPos(null);
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      try {
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
     }
   };
 
-  return (
-    <div 
-      className="relative w-64 h-64 flex items-center justify-center touch-none select-none"
-      ref={containerRef}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-    >
-      {/* Draw lines */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 10 }}>
-        {selectedIndices.length > 0 && containerRef.current && (
-          <path
-            d={`M ${selectedIndices.map((idx, i) => {
-              const el = letterRefs.current[idx];
-              if (!el) return '';
-              const rect = el.getBoundingClientRect();
-              const containerRect = containerRef.current!.getBoundingClientRect();
-              const x = rect.left + rect.width / 2 - containerRect.left;
-              const y = rect.top + rect.height / 2 - containerRect.top;
-              return `${i === 0 ? '' : 'L'} ${x} ${y}`;
-            }).join(' ')} ${currentPos ? `L ${currentPos.x - containerRef.current.getBoundingClientRect().left} ${currentPos.y - containerRef.current.getBoundingClientRect().top}` : ''}`}
-            fill="none"
-            stroke="var(--color-primary)"
-            strokeWidth="8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="opacity-60 drop-shadow-md"
-          />
-        )}
-      </svg>
+  const currentWordPreview = selectedIndices.map((i) => letters[i]).join('');
 
-      {/* Draw letters */}
-      {letters.map((letter, i) => {
-        const isSelected = selectedIndices.includes(i);
-        const isLastSelected = selectedIndices[selectedIndices.length - 1] === i;
-        
-        return (
+  return (
+    <div className="relative flex flex-col items-center">
+      {/* Floating Word Preview (Words of Wonders style) */}
+      <div className="h-9 mb-2 flex items-center justify-center">
+        {currentWordPreview ? (
           <motion.div
-            key={i}
-            ref={el => {
-                letterRefs.current[i] = el;
-            }}
-            className={`absolute w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold cursor-pointer transition-colors shadow-lg
-              ${isSelected ? 'bg-primary text-white scale-110 shadow-primary/50' : 'bg-white text-foreground'}
-              ${isLastSelected ? 'ring-4 ring-primary/30' : ''}
-            `}
-            style={{
-              x: positions[i].x,
-              y: positions[i].y,
-              zIndex: 20
-            }}
-            whileHover={{ scale: isSelected ? 1.1 : 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="px-5 py-1.5 bg-gradient-to-r from-amber-400 to-amber-300 text-stone-950 font-black text-lg tracking-widest rounded-full shadow-lg shadow-amber-400/30 border border-amber-200"
           >
-            {letter}
+            {currentWordPreview}
           </motion.div>
-        );
-      })}
+        ) : (
+          <div className="text-[11px] font-bold text-white/40 tracking-wider uppercase">
+            Glissez pour relier les lettres
+          </div>
+        )}
+      </div>
+
+      <div
+        className="relative w-64 h-64 flex items-center justify-center touch-none select-none"
+        ref={containerRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      >
+        {/* Ambient Ring Tray */}
+        <div className="absolute w-56 h-56 rounded-full bg-white/10 backdrop-blur-md border border-white/15 shadow-inner pointer-events-none" />
+
+        {/* Draw connection lines */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 10 }}>
+          {selectedIndices.length > 0 && containerRef.current && (
+            <path
+              d={`M ${selectedIndices
+                .map((idx, i) => {
+                  const el = letterRefs.current[idx];
+                  if (!el) return '';
+                  const rect = el.getBoundingClientRect();
+                  const containerRect = containerRef.current!.getBoundingClientRect();
+                  const x = rect.left + rect.width / 2 - containerRect.left;
+                  const y = rect.top + rect.height / 2 - containerRect.top;
+                  return `${i === 0 ? '' : 'L'} ${x} ${y}`;
+                })
+                .join(' ')} ${
+                currentPos
+                  ? `L ${currentPos.x - containerRef.current.getBoundingClientRect().left} ${
+                      currentPos.y - containerRef.current.getBoundingClientRect().top
+                    }`
+                  : ''
+              }`}
+              fill="none"
+              stroke="#fbbf24"
+              strokeWidth="9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="opacity-90 drop-shadow-md"
+            />
+          )}
+        </svg>
+
+        {/* Draw circular letters */}
+        {letters.map((letter, i) => {
+          const isSelected = selectedIndices.includes(i);
+          const isLastSelected = selectedIndices[selectedIndices.length - 1] === i;
+
+          return (
+            <motion.div
+              key={i}
+              ref={(el) => {
+                letterRefs.current[i] = el;
+              }}
+              className={`absolute w-14 h-14 rounded-full flex items-center justify-center text-2xl font-black cursor-pointer transition-all shadow-xl ${
+                isSelected
+                  ? 'bg-gradient-to-br from-amber-400 to-amber-500 text-stone-950 scale-110 shadow-amber-500/50 ring-4 ring-amber-300/50'
+                  : 'bg-white/95 text-stone-900 border border-white hover:bg-white shadow-black/20'
+              } ${isLastSelected ? 'animate-pulse' : ''}`}
+              style={{
+                x: positions[i].x,
+                y: positions[i].y,
+                zIndex: 20,
+              }}
+              whileHover={{ scale: isSelected ? 1.15 : 1.08 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              {letter}
+            </motion.div>
+          );
+        })}
+      </div>
     </div>
   );
 }
