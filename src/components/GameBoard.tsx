@@ -11,6 +11,8 @@ import { useGameStore } from '@/store/gameStore';
 import { getWorldForLevel } from '@/lib/worlds';
 import { adService } from '@/lib/ads';
 import { sound } from '@/lib/audio';
+import { generateLevel } from '@/lib/level-generator';
+import { getMasterWordForLevel, DICTIONARY } from '@/lib/dictionary';
 
 interface LevelData {
   level: number;
@@ -55,11 +57,8 @@ export default function GameBoard({ onBackToHome }: Props) {
   // Current World / Wonder info
   const { world, levelInWorld } = getWorldForLevel(currentLevel);
 
-  const loadLevel = useCallback(async (levelNumber: number) => {
+  const loadLevel = useCallback((levelNumber: number) => {
     try {
-      const { generateLevel } = await import('@/lib/level-generator');
-      const { getMasterWordForLevel, DICTIONARY } = await import('@/lib/dictionary');
-
       const { masterWord, targetWordCount } = getMasterWordForLevel(levelNumber);
       const result = generateLevel(masterWord, DICTIONARY, targetWordCount);
 
@@ -101,7 +100,10 @@ export default function GameBoard({ onBackToHome }: Props) {
         showFeedback(`+10 🪙  ${word}`, 'success');
 
         if (newFound.length === levelData.required_words.length) {
-          triggerLevelVictory();
+          // Delay victory modal so user sees the completed grid first
+          setTimeout(() => {
+            triggerLevelVictory();
+          }, 650);
         }
       }
     } else if (levelData.bonus_words.includes(word)) {
@@ -121,19 +123,24 @@ export default function GameBoard({ onBackToHome }: Props) {
 
   const triggerLevelVictory = () => {
     sound.playVictoryFanfare();
-    confetti({
-      particleCount: 160,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: ['#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#fbbf24'],
-    });
-    // Open the victory modal without wiping or flashing the screen
+    try {
+      if (typeof window !== 'undefined') {
+        confetti({
+          particleCount: 120,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#fbbf24'],
+          disableForReducedMotion: true,
+        });
+      }
+    } catch {
+      // Safe fallback
+    }
+    // Open the victory modal
     setShowVictory(true);
   };
 
   const handleNextLevelFromModal = async () => {
-    setShowVictory(false);
-
     // Show Interstitial ad if frequency condition is met
     if (adService.shouldShowInterstitial(currentLevel)) {
       await adService.showInterstitial();
@@ -141,6 +148,9 @@ export default function GameBoard({ onBackToHome }: Props) {
 
     // Complete level in state (advances currentLevel)
     completeLevel(hasDoubledLevelCoins ? 2 : 1);
+
+    // Hide victory modal seamlessly
+    setShowVictory(false);
   };
 
   const handleDoubleReward = () => {

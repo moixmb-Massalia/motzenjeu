@@ -8,15 +8,15 @@
   },
   "plugins": {
     "SplashScreen": {
-      "launchShowDuration": 2000,
-      "backgroundColor": "#fdfbf7",
+      "launchShowDuration": 1500,
+      "backgroundColor": "#0c0a09",
       "androidSplashResourceName": "splash",
       "androidScaleType": "CENTER_CROP",
       "showSpinner": false
     },
     "StatusBar": {
       "style": "Dark",
-      "backgroundColor": "#fdfbf7"
+      "backgroundColor": "#0c0a09"
     }
   }
 }

@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fdfbf7;
-  --foreground: #2d3748;
+  --background: #0c0a09;
+  --foreground: #f8fafc;
   --primary: #f59e0b;
   --primary-hover: #d97706;
   --accent: #10b981;
-  --game-board: #e2e8f0;
-  --letter-bg: #ffffff;
+  --game-board: #1c1917;
+  --letter-bg: #292524;
   --letter-active: #fcd34d;
 }
 
@@ -24,24 +24,10 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #1e1b4b;
-    --foreground: #f8fafc;
-    --primary: #f59e0b;
-    --primary-hover: #fbbf24;
-    --accent: #34d399;
-    --game-board: #312e81;
-    --letter-bg: #4338ca;
-    --letter-active: #fcd34d;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
+html, body {
+  background-color: #0c0a09 !important;
+  color: #f8fafc;
   font-family: var(--font-sans);
-  background-image: radial-gradient(circle at top right, rgba(245,158,11,0.1), transparent 50%),
-                    radial-gradient(circle at bottom left, rgba(16,185,129,0.1), transparent 50%);
-  background-attachment: fixed;
+  min-height: 100%;
+  overscroll-behavior: none;
 }
