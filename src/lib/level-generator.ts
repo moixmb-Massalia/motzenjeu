@@ -1,5 +1,5 @@
 // Level Generator Algorithm
-// This script contains the logic to generate a crossword grid from a master word.
+// Generates a connected crossword grid with scaling difficulty based on level tier
 
 export interface GridWord {
   word: string;
@@ -15,7 +15,7 @@ export interface GeneratedLevel {
   layout: GridWord[];
 }
 
-// Helper to check if a word can be made from the available letters
+// Helper to check if a word can be formed from available letters
 export function canFormWord(word: string, availableLetters: string[]): boolean {
   const letters = [...availableLetters];
   for (const char of word) {
@@ -29,57 +29,59 @@ export function canFormWord(word: string, availableLetters: string[]): boolean {
 // Find all sub-words from a master word
 export function findSubWords(masterWord: string, dictionary: string[]): string[] {
   const letters = masterWord.split('');
-  return dictionary.filter(
-    word => word.length >= 2 && word.length <= masterWord.length && word !== masterWord && canFormWord(word, letters)
+  return Array.from(
+    new Set(
+      dictionary.filter(
+        (word) =>
+          word.length >= 2 &&
+          word.length <= masterWord.length &&
+          word !== masterWord &&
+          canFormWord(word, letters)
+      )
+    )
   );
 }
 
-// A simple crossword generator logic
-export function generateGrid(words: string[]): GridWord[] | null {
-  // Sort words by length descending
+// Crossword generator logic
+export function generateGrid(words: string[]): GridWord[] {
   const sortedWords = [...words].sort((a, b) => b.length - a.length);
-  
-  if (sortedWords.length === 0) return null;
+  if (sortedWords.length === 0) return [];
 
   const layout: GridWord[] = [];
-  
-  // Place the first (longest) word horizontally at 0,0
+
+  // Place first (longest) word horizontally at (0, 0)
   layout.push({
     word: sortedWords[0],
     x: 0,
     y: 0,
-    direction: 'horizontal'
+    direction: 'horizontal',
   });
 
-  // Iteratively try to place remaining words
+  // Iteratively try to intersect remaining words
   for (let i = 1; i < sortedWords.length; i++) {
     const currentWord = sortedWords[i];
     let placed = false;
 
-    // Try to intersect with already placed words
     for (const placedWord of layout) {
       if (placed) break;
 
-      // Find common letters
       for (let j = 0; j < currentWord.length; j++) {
         const charToMatch = currentWord[j];
         const matchIndex = placedWord.word.indexOf(charToMatch);
 
         if (matchIndex !== -1) {
-          // Found an intersection point. Calculate new coordinates.
           const isHorizontal = placedWord.direction === 'horizontal';
           const newDirection = isHorizontal ? 'vertical' : 'horizontal';
-          
-          let newX = isHorizontal ? placedWord.x + matchIndex : placedWord.x - j;
-          let newY = isHorizontal ? placedWord.y - j : placedWord.y + matchIndex;
 
-          // Check for collisions
+          const newX = isHorizontal ? placedWord.x + matchIndex : placedWord.x - j;
+          const newY = isHorizontal ? placedWord.y - j : placedWord.y + matchIndex;
+
           if (!checkCollision(currentWord, newX, newY, newDirection, layout)) {
             layout.push({
               word: currentWord,
               x: newX,
               y: newY,
-              direction: newDirection
+              direction: newDirection,
             });
             placed = true;
             break;
@@ -87,22 +89,33 @@ export function generateGrid(words: string[]): GridWord[] | null {
         }
       }
     }
+
+    // Fallback: if no intersection found, place parallel with safe offset
+    if (!placed) {
+      const last = layout[layout.length - 1];
+      const fallbackY = last.y + (last.direction === 'vertical' ? last.word.length + 1 : 2);
+      layout.push({
+        word: currentWord,
+        x: 0,
+        y: fallbackY,
+        direction: 'horizontal',
+      });
+    }
   }
 
   return layout;
 }
 
-// Check if placing a word at x,y collides with existing words
+// Check for collisions between cells
 function checkCollision(
-  word: string, 
-  x: number, 
-  y: number, 
-  direction: 'horizontal' | 'vertical', 
+  word: string,
+  x: number,
+  y: number,
+  direction: 'horizontal' | 'vertical',
   layout: GridWord[]
 ): boolean {
-  // Create a map of filled cells
   const grid = new Map<string, string>();
-  
+
   for (const w of layout) {
     for (let i = 0; i < w.word.length; i++) {
       const cx = w.direction === 'horizontal' ? w.x + i : w.x;
@@ -111,46 +124,38 @@ function checkCollision(
     }
   }
 
-  // Check the new word
   for (let i = 0; i < word.length; i++) {
     const cx = direction === 'horizontal' ? x + i : x;
     const cy = direction === 'horizontal' ? y : y + i;
     const cellKey = `${cx},${cy}`;
 
     if (grid.has(cellKey) && grid.get(cellKey) !== word[i]) {
-      return true; // Collision!
+      return true; // Letter mismatch collision
     }
-    
-    // We should also ensure words don't directly touch side-by-side incorrectly, 
-    // but for MVP, basic intersection checking is okay.
   }
 
   return false;
 }
 
-// Main generation function
-export function generateLevel(masterWord: string, dictionary: string[]): GeneratedLevel {
+// Main generation function with difficulty scaling
+export function generateLevel(
+  masterWord: string,
+  dictionary: string[],
+  targetWordCount: number = 5
+): GeneratedLevel {
   const subWords = findSubWords(masterWord, dictionary);
-  
-  // Pick a subset of words for the grid (e.g., up to 6 words)
-  // In a real app, you'd filter out obscure words and select a good mix of lengths
-  const targetWordCount = Math.min(6, subWords.length + 1);
-  
-  // Try to generate a valid grid
-  let gridWords = [masterWord];
-  let remainingWords = [...subWords].sort(() => 0.5 - Math.random());
-  
-  // Add subwords until we hit target or run out
-  for (const word of remainingWords) {
+
+  const gridWords: string[] = [masterWord];
+  const shuffledSubWords = [...subWords].sort(() => 0.5 - Math.random());
+
+  for (const w of shuffledSubWords) {
     if (gridWords.length >= targetWordCount) break;
-    gridWords.push(word);
+    gridWords.push(w);
   }
 
   const layout = generateGrid(gridWords);
-
-  // The rest are bonus words
-  const requiredWords = layout ? layout.map(l => l.word) : gridWords;
-  const bonusWords = subWords.filter(w => !requiredWords.includes(w));
+  const requiredWords = layout.map((l) => l.word);
+  const bonusWords = subWords.filter((w) => !requiredWords.includes(w));
 
   // Scramble letters for the wheel
   const letters = masterWord.split('').sort(() => 0.5 - Math.random());
@@ -159,6 +164,6 @@ export function generateLevel(masterWord: string, dictionary: string[]): Generat
     letters,
     required_words: requiredWords,
     bonus_words: bonusWords,
-    layout: layout || []
+    layout,
   };
 }

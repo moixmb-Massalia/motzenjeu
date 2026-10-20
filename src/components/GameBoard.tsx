@@ -52,11 +52,10 @@ export default function GameBoard({ onBackToHome }: Props) {
   const loadLevel = useCallback(async (levelNumber: number) => {
     try {
       const { generateLevel } = await import('@/lib/level-generator');
-      const { LEVEL_WORDS, DICTIONARY } = await import('@/lib/dictionary');
+      const { getMasterWordForLevel, DICTIONARY } = await import('@/lib/dictionary');
 
-      const levelIndex = (levelNumber - 1) % LEVEL_WORDS.length;
-      const masterWord = LEVEL_WORDS[levelIndex];
-      const result = generateLevel(masterWord, DICTIONARY);
+      const { masterWord, targetWordCount } = getMasterWordForLevel(levelNumber);
+      const result = generateLevel(masterWord, DICTIONARY, targetWordCount);
 
       setLevelData({
         level: levelNumber,
