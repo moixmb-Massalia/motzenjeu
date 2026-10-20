@@ -10,6 +10,7 @@ import confetti from 'canvas-confetti';
 import { useGameStore } from '@/store/gameStore';
 import { getWorldForLevel } from '@/lib/worlds';
 import { adService } from '@/lib/ads';
+import { sound } from '@/lib/audio';
 
 interface LevelData {
   level: number;
@@ -35,7 +36,12 @@ export default function GameBoard({ onBackToHome }: Props) {
     bonusJarWords,
     bonusJarCapacity,
     claimBonusJar,
+    settings,
   } = useGameStore();
+
+  useEffect(() => {
+    sound.setPreferences(settings.soundEnabled, settings.hapticsEnabled);
+  }, [settings]);
 
   const [levelData, setLevelData] = useState<LevelData | null>(null);
   const [foundWords, setFoundWords] = useState<string[]>([]);
@@ -85,11 +91,13 @@ export default function GameBoard({ onBackToHome }: Props) {
 
     if (levelData.required_words.includes(word)) {
       if (foundWords.includes(word)) {
+        sound.playWordError();
         showFeedback('Déjà trouvé !', 'error');
       } else {
         const newFound = [...foundWords, word];
         setFoundWords(newFound);
         recordWordFound(word, false);
+        sound.playWordSuccess();
         showFeedback(`+10 🪙  ${word}`, 'success');
 
         if (newFound.length === levelData.required_words.length) {
@@ -99,16 +107,20 @@ export default function GameBoard({ onBackToHome }: Props) {
     } else if (levelData.bonus_words.includes(word)) {
       if (!bonusJarWords.includes(word)) {
         recordWordFound(word, true);
+        sound.playBonusSuccess();
         showFeedback(`Mot Bonus ! +5 🪙  ${word}`, 'bonus');
       } else {
+        sound.playWordError();
         showFeedback('Bonus déjà trouvé !', 'error');
       }
     } else {
+      sound.playWordError();
       showFeedback('Introuvable', 'error');
     }
   };
 
   const triggerLevelVictory = () => {
+    sound.playVictoryFanfare();
     confetti({
       particleCount: 160,
       spread: 70,
@@ -164,6 +176,7 @@ export default function GameBoard({ onBackToHome }: Props) {
   };
 
   const revealWord = (wordToReveal: string) => {
+    sound.playCoinSound();
     const newFound = [...foundWords, wordToReveal];
     setFoundWords(newFound);
     showFeedback(`Indice : ${wordToReveal}`, 'success');
@@ -174,6 +187,7 @@ export default function GameBoard({ onBackToHome }: Props) {
   };
 
   const handleShuffle = () => {
+    sound.playShuffleSound();
     if (levelData) {
       setLevelData({
         ...levelData,
@@ -185,6 +199,7 @@ export default function GameBoard({ onBackToHome }: Props) {
   const handleClaimJar = () => {
     const reward = claimBonusJar();
     if (reward > 0) {
+      sound.playCoinSound();
       showFeedback(`Bocal ouvert ! +${reward} 🪙`, 'success');
       confetti({ particleCount: 60, spread: 50, origin: { y: 0.3 } });
     } else {

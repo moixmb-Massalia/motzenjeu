@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { sound } from '@/lib/audio';
 
 interface LetterWheelProps {
   letters: string[];
@@ -50,6 +51,7 @@ export default function LetterWheel({ letters, onWordComplete }: LetterWheelProp
     const index = getLetterAtPoint(e.clientX, e.clientY);
     if (index !== -1) {
       setSelectedIndices([index]);
+      sound.playLetterTone(0);
       setCurrentPos({ x: e.clientX, y: e.clientY });
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     }
@@ -63,9 +65,11 @@ export default function LetterWheel({ letters, onWordComplete }: LetterWheelProp
     if (index !== -1) {
       if (selectedIndices[selectedIndices.length - 2] === index) {
         // Backtracking
+        sound.playLetterDeselect();
         setSelectedIndices((prev) => prev.slice(0, -1));
       } else if (!selectedIndices.includes(index)) {
         // New letter added
+        sound.playLetterTone(selectedIndices.length);
         setSelectedIndices((prev) => [...prev, index]);
       }
     }
